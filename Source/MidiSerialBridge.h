@@ -3,6 +3,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_events/juce_events.h>
 #include "SerialPortManager.h"
+#include <unordered_set>
 
 /**
  * MidiSerialBridge manages the bidirectional bridge between MIDI and Serial ports
@@ -32,6 +33,18 @@ public:
     std::function<void()> onMidiReceived;
     std::function<void()> onMidiSent;
     std::function<void()> onSerialTraffic;
+
+    // Runtime configuration -------------------------------------------------
+    // Set per-string velocity scale (index 0..5). Value expected 1..10.
+    void setStringVelocityScale(int stringIndex, int scale);
+    // Set root note (0=C .. 11=B) and scale type intervals (e.g. major)
+    void setScale(int rootNote, const juce::Array<int>& intervals); // intervals are pitch-class offsets from root
+    // Enable / disable diatonic filtering
+    void setFilterEnabled(bool enabled) { filterEnabled = enabled; }
+    bool getFilterEnabled() const { return filterEnabled; }
+
+    // Utility to describe current scale
+    juce::String getScaleDescription() const;
     
 private:
     // Timer callback to poll serial data
@@ -45,6 +58,11 @@ private:
     void onDataByte(juce::uint8 byte);
     void onStatusByte(juce::uint8 byte);
     void sendMidiMessage();
+
+    // Message transform helpers
+    bool shouldFilterOutNote(int midiNote) const; // returns true if note should be suppressed
+    int applyVelocityScaling(int channel, int velocity) const; // channel 0..15
+    bool processOutgoingMessage(const juce::MidiMessage& original, juce::MidiMessage& transformed); // returns false if filtered
     
     // Utility functions
     juce::String describeMidiMessage(const juce::MidiMessage& message);
@@ -89,6 +107,13 @@ private:
     juce::MemoryBlock messageData;
     
     juce::Time attachTime;
+
+    // Runtime settings -------------------------------------------------------
+    int stringVelocityScale[6]; // 1..10 values, mapped to velocity multiplier
+    int rootNotePc; // 0..11
+    bool diatonicMask[12]; // allowed pitch classes
+    bool filterEnabled { false };
+    std::unordered_set<int> suppressedNotes; // store (channel<<8)|note for which NoteOn was filtered, so we also drop NoteOff
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiSerialBridge)
 };

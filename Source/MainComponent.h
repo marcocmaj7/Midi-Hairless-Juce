@@ -26,6 +26,11 @@ private:
     void onBridgeToggled();
     void onDebugToggled();
     void onConnectionChanged();
+
+    // New feature handlers
+    void onVelocitySliderChanged(int stringIndex);
+    void onScaleChanged();
+    void onFilterToggle();
     
     void addMessage(const juce::String& message);
     void addDebugMessage(const juce::String& message);
@@ -112,6 +117,19 @@ private:
     int serialBlinkCounter;
     
     static constexpr int LED_BLINK_DURATION = 3; // Timer ticks
+
+    // Per-string velocity sliders (6 strings)
+    juce::OwnedArray<juce::Slider> stringVelocitySliders;
+    juce::OwnedArray<juce::Label> stringVelocityLabels;
+
+    // Scale selection UI
+    juce::ComboBox rootNoteCombo; // C..B
+    juce::ComboBox scaleTypeCombo; // Major, Minor (extendable)
+    juce::ToggleButton filterEnableToggle; // enable diatonic filtering
+    juce::Label scaleLabel;
+
+    void initialiseScaleUI();
+    void applyScaleToBridge();
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

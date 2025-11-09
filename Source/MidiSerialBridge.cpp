@@ -5,6 +5,12 @@ MidiSerialBridge::MidiSerialBridge()
     , dataExpected(0)
     , attachTime(juce::Time::getCurrentTime())
 {
+    // Defaults: all velocity scales at 10 (unity)
+    for (int i = 0; i < 6; ++i)
+        stringVelocityScale[i] = 10;
+    rootNotePc = 0; // C
+    for (int i = 0; i < 12; ++i)
+        diatonicMask[i] = true; // initially allow all notes (chromatic)
 }
 
 MidiSerialBridge::~MidiSerialBridge()
@@ -138,13 +144,24 @@ void MidiSerialBridge::handleIncomingMidiMessage(juce::MidiInput* source, const 
     if (onMidiReceived)
         onMidiReceived();
     
+    juce::MidiMessage transformed(message);
+    if (! processOutgoingMessage(message, transformed))
+        return; // filtered out
+
     // Send to serial port
     if (serialPort.isOpen())
     {
-        serialPort.write(message.getRawData(), message.getRawDataSize());
-        
+        serialPort.write(transformed.getRawData(), transformed.getRawDataSize());
         if (onSerialTraffic)
             onSerialTraffic();
+    }
+
+    // Send to MIDI output (loopback to DAW)
+    if (midiOutput != nullptr)
+    {
+        midiOutput->sendMessageNow(transformed);
+        if (onMidiSent)
+            onMidiSent();
     }
 }
 
@@ -286,10 +303,13 @@ void MidiSerialBridge::sendMidiMessage()
         if (midiOutput != nullptr)
         {
             juce::MidiMessage msg(data, static_cast<int>(messageData.getSize()));
-            midiOutput->sendMessageNow(msg);
-            
-            if (onMidiSent)
-                onMidiSent();
+            juce::MidiMessage transformed(msg);
+            if (processOutgoingMessage(msg, transformed))
+            {
+                midiOutput->sendMessageNow(transformed);
+                if (onMidiSent)
+                    onMidiSent();
+            }
         }
     }
     
@@ -423,4 +443,92 @@ juce::String MidiSerialBridge::applyTimeStamp(const juce::String& message)
 {
     double seconds = (juce::Time::getCurrentTime() - attachTime).inSeconds();
     return juce::String::formatted("+%.1f - ", seconds) + message;
+}
+
+// ---------------------- Runtime configuration -------------------------------
+void MidiSerialBridge::setStringVelocityScale(int stringIndex, int scale)
+{
+    if (stringIndex < 0 || stringIndex >= 6) return;
+    scale = juce::jlimit(1, 10, scale);
+    stringVelocityScale[stringIndex] = scale;
+}
+
+void MidiSerialBridge::setScale(int rootNote, const juce::Array<int>& intervals)
+{
+    rootNotePc = ((rootNote % 12) + 12) % 12;
+    for (int i = 0; i < 12; ++i) diatonicMask[i] = false;
+    for (int interval : intervals)
+    {
+        int pc = ((rootNotePc + interval) % 12 + 12) % 12;
+        diatonicMask[pc] = true;
+    }
+}
+
+juce::String MidiSerialBridge::getScaleDescription() const
+{
+    static const char* names[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+    juce::String allowed;
+    for (int i = 0; i < 12; ++i)
+        if (diatonicMask[i]) allowed << names[i] << " ";
+    return juce::String(names[rootNotePc]) + " scale: " + allowed.trim();
+}
+
+// ---------------------- Processing helpers ---------------------------------
+bool MidiSerialBridge::shouldFilterOutNote(int midiNote) const
+{
+    if (! filterEnabled) return false;
+    int pc = ((midiNote % 12) + 12) % 12;
+    return ! diatonicMask[pc];
+}
+
+int MidiSerialBridge::applyVelocityScaling(int channel, int velocity) const
+{
+    // Assume channels 0..5 map to guitar strings lowE..highE or vice versa.
+    // We cannot know pickup ordering; user can adjust scales accordingly.
+    if (channel >= 0 && channel < 6)
+    {
+        float factor = stringVelocityScale[channel] / 10.0f; // 1..10 -> 0.1..1.0
+        int scaled = (int)std::round(velocity * factor);
+        return juce::jlimit(1, 127, scaled); // avoid zero (interpreted as NoteOff)
+    }
+    return velocity;
+}
+
+bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original, juce::MidiMessage& transformed)
+{
+    if (original.isNoteOn())
+    {
+        int channel = original.getChannel() - 1; // convert to 0-based
+        int note = original.getNoteNumber();
+        if (shouldFilterOutNote(note))
+        {
+            // Mark suppressed so matching NoteOff also filtered
+            suppressedNotes.insert((channel << 8) | note);
+            return false;
+        }
+        int vel = applyVelocityScaling(channel, (int) original.getVelocity());
+        transformed = juce::MidiMessage::noteOn(channel + 1, note, (juce::uint8) vel);
+        transformed.setTimeStamp(original.getTimeStamp());
+        return true;
+    }
+    else if (original.isNoteOff())
+    {
+        int channel = original.getChannel() - 1;
+        int note = original.getNoteNumber();
+        int key = (channel << 8) | note;
+        if (suppressedNotes.find(key) != suppressedNotes.end())
+        {
+            // Drop matching note-off
+            suppressedNotes.erase(key);
+            return false;
+        }
+        transformed = original; // pass through note-off unchanged
+        return true;
+    }
+    else
+    {
+        // Non-note messages pass through unchanged
+        transformed = original;
+        return true;
+    }
 }

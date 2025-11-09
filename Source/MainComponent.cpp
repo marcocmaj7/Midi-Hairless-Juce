@@ -84,10 +84,50 @@ MainComponent::MainComponent()
     bridge.onMidiSent = [this]() { midiOutBlinkCounter = LED_BLINK_DURATION; };
     bridge.onSerialTraffic = [this]() { serialBlinkCounter = LED_BLINK_DURATION; };
     
+    // Per-string velocity sliders (6)
+    static const char* stringNames[6] = { "6: Low E", "5: A", "4: D", "3: G", "2: B", "1: High E" };
+    for (int i = 0; i < 6; ++i)
+    {
+        auto* lbl = new juce::Label();
+        lbl->setText(juce::String(stringNames[i]) + " Vel (1-10)", juce::dontSendNotification);
+        lbl->setJustificationType(juce::Justification::centredRight);
+        stringVelocityLabels.add(lbl);
+        addAndMakeVisible(lbl);
+
+        auto* s = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        s->setRange(1, 10, 1);
+        s->setValue(10, juce::dontSendNotification);
+        s->onValueChange = [this, i]() { onVelocitySliderChanged(i); };
+        stringVelocitySliders.add(s);
+        addAndMakeVisible(s);
+    }
+
+    // Scale UI
+    scaleLabel.setText("Scala di Riferimento:", juce::dontSendNotification);
+    addAndMakeVisible(scaleLabel);
+
+    rootNoteCombo.addItemList({"Do","Do#","Re","Re#","Mi","Fa","Fa#","Sol","Sol#","La","La#","Si"}, 1);
+    rootNoteCombo.onChange = [this]() { onScaleChanged(); };
+    addAndMakeVisible(rootNoteCombo);
+    rootNoteCombo.setSelectedId(3, juce::dontSendNotification); // default Re (id=3)
+
+    scaleTypeCombo.addItemList({"Maggiore","Minore Naturale","Dorian","Phrygian","Lydian","Mixolydian","Locrian"}, 1);
+    scaleTypeCombo.onChange = [this]() { onScaleChanged(); };
+    addAndMakeVisible(scaleTypeCombo);
+    scaleTypeCombo.setSelectedId(1, juce::dontSendNotification);
+
+    filterEnableToggle.setButtonText("Filtro Diatonico Attivo");
+    filterEnableToggle.setToggleState(true, juce::dontSendNotification);
+    filterEnableToggle.onClick = [this]() { onFilterToggle(); };
+    addAndMakeVisible(filterEnableToggle);
+
     // Initial refresh
     refreshSerialPorts();
     refreshMidiInputs();
     refreshMidiOutputs();
+
+    // Apply initial scale to bridge
+    applyScaleToBridge();
     
     // Start timer for UI updates (50ms = 20Hz)
     startTimer(50);
@@ -162,6 +202,41 @@ void MainComponent::resized()
     
     bounds.removeFromTop(10);
     
+    // Velocity sliders grid (2 columns x 3 rows)
+    auto velSection = bounds.removeFromTop(140);
+    auto colLeft = velSection.removeFromLeft(velSection.getWidth() / 2).reduced(0, 5);
+    auto colRight = velSection.reduced(10, 5);
+    for (int i = 0; i < 3; ++i)
+    {
+        auto row = colLeft.removeFromTop(40);
+        stringVelocityLabels[i]->setBounds(row.removeFromLeft(110));
+        row.removeFromLeft(5);
+        stringVelocitySliders[i]->setBounds(row);
+        colLeft.removeFromTop(5);
+    }
+    for (int i = 3; i < 6; ++i)
+    {
+        auto row = colRight.removeFromTop(40);
+        stringVelocityLabels[i]->setBounds(row.removeFromLeft(110));
+        row.removeFromLeft(5);
+        stringVelocitySliders[i]->setBounds(row);
+        colRight.removeFromTop(5);
+    }
+
+    bounds.removeFromTop(5);
+
+    // Scale controls row
+    auto scaleRow1 = bounds.removeFromTop(30);
+    scaleLabel.setBounds(scaleRow1.removeFromLeft(140));
+    scaleRow1.removeFromLeft(5);
+    rootNoteCombo.setBounds(scaleRow1.removeFromLeft(120));
+    scaleRow1.removeFromLeft(10);
+    scaleTypeCombo.setBounds(scaleRow1.removeFromLeft(180));
+    scaleRow1.removeFromLeft(10);
+    filterEnableToggle.setBounds(scaleRow1.removeFromLeft(200));
+
+    bounds.removeFromTop(10);
+
     // Message lists
     statusLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(5);
@@ -388,4 +463,49 @@ void MainComponent::addDebugMessage(const juce::String& message)
     }
     
     debugList.moveCaretToEnd();
+}
+
+// ------------------------ New feature handlers ------------------------------
+void MainComponent::onVelocitySliderChanged(int stringIndex)
+{
+    if (auto* s = stringVelocitySliders[stringIndex])
+        bridge.setStringVelocityScale(stringIndex, (int) s->getValue());
+}
+
+static juce::Array<int> intervalsForScaleType(int scaleTypeId)
+{
+    // Return interval set (in semitones from root) for various modes
+    switch (scaleTypeId)
+    {
+        case 1: return {0,2,4,5,7,9,11}; // Major (Ionian)
+        case 2: return {0,2,3,5,7,8,10}; // Natural Minor (Aeolian)
+        case 3: return {0,2,3,5,7,9,10}; // Dorian
+        case 4: return {0,1,3,5,7,8,10}; // Phrygian
+        case 5: return {0,2,4,6,7,9,11}; // Lydian
+        case 6: return {0,2,4,5,7,9,10}; // Mixolydian
+        case 7: return {0,1,3,5,6,8,10}; // Locrian
+        default: return {0,1,2,3,4,5,6,7,8,9,10,11}; // Chromatic (no filtering)
+    }
+}
+
+void MainComponent::applyScaleToBridge()
+{
+    int rootId = rootNoteCombo.getSelectedId();
+    int scaleId = scaleTypeCombo.getSelectedId();
+    if (rootId == 0) rootId = 1; // default to C
+    if (scaleId == 0) scaleId = 1;
+    int rootPc = rootId - 1; // 0=C .. 11=B
+    auto intervals = intervalsForScaleType(scaleId);
+    bridge.setScale(rootPc, intervals);
+    bridge.setFilterEnabled(filterEnableToggle.getToggleState());
+}
+
+void MainComponent::onScaleChanged()
+{
+    applyScaleToBridge();
+}
+
+void MainComponent::onFilterToggle()
+{
+    bridge.setFilterEnabled(filterEnableToggle.getToggleState());
 }
