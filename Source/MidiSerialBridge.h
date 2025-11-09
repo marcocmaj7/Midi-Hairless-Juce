@@ -1,0 +1,94 @@
+#pragma once
+
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_events/juce_events.h>
+#include "SerialPortManager.h"
+
+/**
+ * MidiSerialBridge manages the bidirectional bridge between MIDI and Serial ports
+ * This is the JUCE equivalent of the Qt Bridge class
+ */
+class MidiSerialBridge : public juce::Timer,
+                         private juce::MidiInputCallback
+{
+public:
+    MidiSerialBridge();
+    ~MidiSerialBridge() override;
+    
+    // Attach to MIDI and Serial ports
+    void attach(const juce::String& serialPortName,
+                const juce::String& midiInputName,
+                const juce::String& midiOutputName);
+    
+    // Detach from all ports
+    void detach();
+    
+    // Check if currently bridging
+    bool isActive() const { return serialPort.isOpen() || midiInput != nullptr || midiOutput != nullptr; }
+    
+    // Callback types for status updates
+    std::function<void(const juce::String&)> onDisplayMessage;
+    std::function<void(const juce::String&)> onDebugMessage;
+    std::function<void()> onMidiReceived;
+    std::function<void()> onMidiSent;
+    std::function<void()> onSerialTraffic;
+    
+private:
+    // Timer callback to poll serial data
+    void timerCallback() override;
+    
+    // MIDI input callback
+    void handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) override;
+    
+    // Process serial data
+    void processSerialData();
+    void onDataByte(juce::uint8 byte);
+    void onStatusByte(juce::uint8 byte);
+    void sendMidiMessage();
+    
+    // Utility functions
+    juce::String describeMidiMessage(const juce::MidiMessage& message);
+    juce::String describeMidiMessage(const juce::uint8* data, int length);
+    juce::String applyTimeStamp(const juce::String& message);
+    
+    // MIDI message parsing constants
+    static constexpr juce::uint8 STATUS_MASK = 0x80;
+    static constexpr juce::uint8 CHANNEL_MASK = 0x0F;
+    static constexpr juce::uint8 TAG_MASK = 0xF0;
+    
+    static constexpr juce::uint8 TAG_NOTE_OFF = 0x80;
+    static constexpr juce::uint8 TAG_NOTE_ON = 0x90;
+    static constexpr juce::uint8 TAG_KEY_PRESSURE = 0xA0;
+    static constexpr juce::uint8 TAG_CONTROLLER = 0xB0;
+    static constexpr juce::uint8 TAG_PROGRAM = 0xC0;
+    static constexpr juce::uint8 TAG_CHANNEL_PRESSURE = 0xD0;
+    static constexpr juce::uint8 TAG_PITCH_BEND = 0xE0;
+    static constexpr juce::uint8 TAG_SPECIAL = 0xF0;
+    
+    static constexpr juce::uint8 MSG_SYSEX_START = 0xF0;
+    static constexpr juce::uint8 MSG_SYSEX_END = 0xF7;
+    static constexpr juce::uint8 MSG_DEBUG = 0xFF;
+    
+    static bool isVoiceMessage(juce::uint8 tag) { return tag >= 0x80 && tag <= 0xEF; }
+    static bool isSysCommonMessage(juce::uint8 tag) { return tag >= 0xF0 && tag <= 0xF7; }
+    static bool isRealtimeMessage(juce::uint8 tag) { return tag >= 0xF8 && tag < 0xFF; }
+    
+    static int getDataLength(int status);
+    
+    // Member variables
+    SerialPortManager serialPort;
+    std::unique_ptr<juce::MidiInput> midiInput;
+    std::unique_ptr<juce::MidiOutput> midiOutput;
+    
+    juce::String midiInputName;
+    juce::String midiOutputName;
+    
+    // MIDI parsing state
+    int runningStatus;
+    int dataExpected;
+    juce::MemoryBlock messageData;
+    
+    juce::Time attachTime;
+    
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiSerialBridge)
+};
