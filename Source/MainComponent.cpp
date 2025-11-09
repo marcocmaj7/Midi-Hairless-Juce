@@ -25,11 +25,7 @@ MainComponent::MainComponent()
     midiOutLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(midiOutLabel);
     
-    statusLabel.setText("Status Messages:", juce::dontSendNotification);
-    addAndMakeVisible(statusLabel);
-    
-    debugLabel.setText("Debug Messages:", juce::dontSendNotification);
-    addAndMakeVisible(debugLabel);
+    // Logs rimossi: nessuna label/status
     
     // Setup combo boxes
     addAndMakeVisible(serialCombo);
@@ -45,31 +41,12 @@ MainComponent::MainComponent()
     bridgeToggle.onClick = [this] { onBridgeToggled(); };
     addAndMakeVisible(bridgeToggle);
     
-    debugToggle.setButtonText("Show Debug Messages");
-    debugToggle.onClick = [this] { onDebugToggled(); };
-    addAndMakeVisible(debugToggle);
+    // Toggle debug rimosso
     
     // Setup text editors (read-only)
-    messageList.setMultiLine(true);
-    messageList.setReadOnly(true);
-    messageList.setScrollbarsShown(true);
-    messageList.setCaretVisible(false);
-    messageList.setPopupMenuEnabled(true);
-    messageList.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff242730));
-    messageList.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x223b3f4a));
-    messageList.applyFontToAllText(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, 0));
-    addAndMakeVisible(messageList);
+    // Log editor rimosso
     
-    debugList.setMultiLine(true);
-    debugList.setReadOnly(true);
-    debugList.setScrollbarsShown(true);
-    debugList.setCaretVisible(false);
-    debugList.setPopupMenuEnabled(true);
-    debugList.setVisible(false);
-    debugList.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff242730));
-    debugList.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x223b3f4a));
-    debugList.applyFontToAllText(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, 0));
-    addAndMakeVisible(debugList);
+    // Debug editor rimosso
     
     // Setup LEDs
     midiInLEDLabel.setText("MIDI In", juce::dontSendNotification);
@@ -86,10 +63,13 @@ MainComponent::MainComponent()
     serialLEDLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(serialLED);
     addAndMakeVisible(serialLEDLabel);
+    // Hide LED labels as requested (icons convey meaning by position)
+    midiInLEDLabel.setVisible(false);
+    midiOutLEDLabel.setVisible(false);
+    serialLEDLabel.setVisible(false);
     
     // Setup bridge callbacks
-    bridge.onDisplayMessage = [this](const juce::String& msg) { addMessage(msg); };
-    bridge.onDebugMessage = [this](const juce::String& msg) { addDebugMessage(msg); };
+    // Nessun collegamento a messaggi di log
     bridge.onMidiReceived = [this]() { midiInBlinkCounter = LED_BLINK_DURATION; };
     bridge.onMidiSent = [this]() { midiOutBlinkCounter = LED_BLINK_DURATION; };
     bridge.onSerialTraffic = [this]() { serialBlinkCounter = LED_BLINK_DURATION; };
@@ -98,23 +78,48 @@ MainComponent::MainComponent()
     addAndMakeVisible(velocityPanel);
     addAndMakeVisible(scalePanel);
 
-    // Per-string velocity sliders (6)
-    static const char* stringNames[6] = { "6: Low E", "5: A", "4: D", "3: G", "2: B", "1: High E" };
+    // Per-string velocity & tuning sliders (6) Low E (index0) -> High E (index5)
+    static const char* stringNames[6] = { "Low E", "A", "D", "G", "B", "High E" };
     for (int i = 0; i < 6; ++i)
     {
         auto* lbl = new juce::Label();
-        lbl->setText(juce::String(stringNames[i]) + " Vel (1-10)", juce::dontSendNotification);
-        lbl->setJustificationType(juce::Justification::centredRight);
+        lbl->setText(stringNames[i], juce::dontSendNotification);
+        lbl->setJustificationType(juce::Justification::centredLeft);
         stringVelocityLabels.add(lbl);
         addAndMakeVisible(lbl);
 
-        auto* s = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
-        s->setRange(1, 10, 1);
-        s->setValue(10, juce::dontSendNotification);
-        s->onValueChange = [this, i]() { onVelocitySliderChanged(i); };
-        stringVelocitySliders.add(s);
-        addAndMakeVisible(s);
+        auto* vel = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        vel->setRange(1, 10, 1);
+        vel->setValue(10, juce::dontSendNotification);
+        vel->onValueChange = [this, i]() { onVelocitySliderChanged(i); };
+        stringVelocitySliders.add(vel);
+        addAndMakeVisible(vel);
+
+        auto* oct = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        oct->setRange(-4, 4, 1);
+        oct->setValue(0, juce::dontSendNotification);
+        oct->onValueChange = [this, i]() { onOctaveSliderChanged(i); };
+        stringOctaveSliders.add(oct);
+        addAndMakeVisible(oct);
+
+        auto* semi = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        semi->setRange(-12, 12, 1);
+        semi->setValue(0, juce::dontSendNotification);
+        semi->onValueChange = [this, i]() { onSemitoneSliderChanged(i); };
+        stringSemitoneSliders.add(semi);
+        addAndMakeVisible(semi);
     }
+
+    // Column headers
+    velHeaderLabel.setText("Velocity", juce::dontSendNotification);
+    velHeaderLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(velHeaderLabel);
+    octHeaderLabel.setText("Octave", juce::dontSendNotification);
+    octHeaderLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(octHeaderLabel);
+    semiHeaderLabel.setText("Semitone", juce::dontSendNotification);
+    semiHeaderLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(semiHeaderLabel);
 
     // Scale UI
     scaleLabel.setText("Scala di Riferimento:", juce::dontSendNotification);
@@ -135,6 +140,14 @@ MainComponent::MainComponent()
     filterEnableToggle.onClick = [this]() { onFilterToggle(); };
     addAndMakeVisible(filterEnableToggle);
 
+    // Diatonic mode combo
+    diatonicModeLabel.setText("Modo: ", juce::dontSendNotification);
+    addAndMakeVisible(diatonicModeLabel);
+    diatonicModeCombo.addItemList({"Off","Filtro","Sostituisci (Up)"}, 1);
+    diatonicModeCombo.setSelectedId(2, juce::dontSendNotification); // default Filter (id=2 => "Filtro")
+    diatonicModeCombo.onChange = [this]() { onDiatonicModeChanged(); };
+    addAndMakeVisible(diatonicModeCombo);
+
     // Initial refresh
     refreshSerialPorts();
     refreshMidiInputs();
@@ -143,10 +156,14 @@ MainComponent::MainComponent()
     // Apply initial scale to bridge
     applyScaleToBridge();
     
-    // Start timer for UI updates (50ms = 20Hz)
+    // Avvio timer UI (50ms = 20Hz)
     startTimer(50);
     
-    setSize(800, 640);
+    setSize(800, 620);
+
+    // Attiva automaticamente il bridge all'avvio
+    bridgeToggle.setToggleState(true, juce::dontSendNotification);
+    onBridgeToggled();
 }
 
 MainComponent::~MainComponent()
@@ -170,11 +187,10 @@ void MainComponent::resized()
     using juce::Grid;
     auto outer = getLocalBounds().reduced(12);
 
-    // Panels heights
+    // Panels heights (niente sezione logs)
     auto connectionArea = outer.removeFromTop(150);
-    auto midArea = outer.removeFromTop(210);
-    auto scaleArea = outer.removeFromTop(80);
-    auto logsArea = outer;
+    auto midArea = outer.removeFromTop(300);
+    auto scaleArea = outer.removeFromTop(110);
 
     // Connection panel bounds and inner layout
     connectionPanel.setBounds(connectionArea);
@@ -183,49 +199,88 @@ void MainComponent::resized()
         Grid grid;
         grid.rowGap = Grid::Px(6);
         grid.columnGap = Grid::Px(8);
-        grid.templateColumns = { Grid::TrackInfo(Grid::Px(120)), Grid::TrackInfo(Grid::Fr(1)) };
-        grid.templateRows = { Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)) };
+        // Columns: Label (120px), Combo (260px), LED (30px), Filler (1fr)
+        grid.templateColumns = {
+            Grid::TrackInfo(Grid::Px(120)),
+            Grid::TrackInfo(Grid::Px(260)),
+            Grid::TrackInfo(Grid::Px(30)),
+            Grid::TrackInfo(Grid::Fr(1))
+        };
+        // Rows: Serial, MIDI In, MIDI Out, Toggles
+        grid.templateRows = {
+            Grid::TrackInfo(Grid::Px(30)),
+            Grid::TrackInfo(Grid::Px(30)),
+            Grid::TrackInfo(Grid::Px(30)),
+            Grid::TrackInfo(Grid::Px(30))
+        };
 
-        auto place = [&](juce::Component& c){ grid.items.add(juce::GridItem(c)); };
-        place(serialLabel); place(serialCombo);
-        place(midiInLabel); place(midiInCombo);
-        place(midiOutLabel); place(midiOutCombo);
-        place(bridgeToggle); place(debugToggle);
+        // Row 1: Serial
+    grid.items.add(juce::GridItem(serialLabel).withArea(1, 1));
+    grid.items.add(juce::GridItem(serialCombo).withArea(1, 2));
+    grid.items.add(juce::GridItem(serialLED).withArea(1, 3).withAlignSelf(juce::GridItem::AlignSelf::center));
+    grid.items.add(juce::GridItem().withArea(1, 4)); // filler
+
+        // Row 2: MIDI In
+    grid.items.add(juce::GridItem(midiInLabel).withArea(2, 1));
+    grid.items.add(juce::GridItem(midiInCombo).withArea(2, 2));
+    grid.items.add(juce::GridItem(midiInLED).withArea(2, 3).withAlignSelf(juce::GridItem::AlignSelf::center));
+    grid.items.add(juce::GridItem().withArea(2, 4));
+
+        // Row 3: MIDI Out
+    grid.items.add(juce::GridItem(midiOutLabel).withArea(3, 1));
+    grid.items.add(juce::GridItem(midiOutCombo).withArea(3, 2));
+    grid.items.add(juce::GridItem(midiOutLED).withArea(3, 3).withAlignSelf(juce::GridItem::AlignSelf::center));
+    grid.items.add(juce::GridItem().withArea(3, 4));
+
+    // Row 4: Solo toggle Bridge
+    grid.items.add(juce::GridItem(bridgeToggle).withArea(4, 1));
+    grid.items.add(juce::GridItem().withArea(4, 2));
+    grid.items.add(juce::GridItem().withArea(4, 3));
+    grid.items.add(juce::GridItem().withArea(4, 4));
 
         grid.performLayout(connInner);
+        // Size LEDs to 24x24 and center vertically within their grid cell
+        auto placeLed = [](juce::Component& c){ c.setSize(24, 24); };
+        placeLed(serialLED);
+        placeLed(midiInLED);
+        placeLed(midiOutLED);
     }
 
-    // LED strip inside connection panel, at bottom
-    {
-        auto ledSection = connectionArea.reduced(12);
-        ledSection = ledSection.removeFromBottom(56);
-        int ledWidth = ledSection.getWidth() / 3;
-        auto inArea = ledSection.removeFromLeft(ledWidth);
-        midiInLED.setBounds(inArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-        midiInLEDLabel.setBounds(inArea);
-        auto outArea = ledSection.removeFromLeft(ledWidth);
-        midiOutLED.setBounds(outArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-        midiOutLEDLabel.setBounds(outArea);
-        auto serArea = ledSection.removeFromLeft(ledWidth);
-        serialLED.setBounds(serArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-        serialLEDLabel.setBounds(serArea);
-    }
-
-    // Velocity panel
+    // Velocity & Tuning panel
     velocityPanel.setBounds(midArea);
     auto velInner = midArea.reduced(12).withTrimmedTop(26);
     {
         Grid grid;
-        grid.rowGap = Grid::Px(6); grid.columnGap = Grid::Px(8);
-        grid.templateColumns = { Grid::TrackInfo(Grid::Px(110)), Grid::TrackInfo(Grid::Fr(1)), Grid::TrackInfo(Grid::Px(110)), Grid::TrackInfo(Grid::Fr(1)) };
-        grid.templateRows = { Grid::TrackInfo(Grid::Px(32)), Grid::TrackInfo(Grid::Px(32)), Grid::TrackInfo(Grid::Px(32)) };
+        grid.rowGap = Grid::Px(4); grid.columnGap = Grid::Px(8);
+        grid.templateColumns = {
+            Grid::TrackInfo(Grid::Px(90)),   // String name
+            Grid::TrackInfo(Grid::Px(170)),  // Velocity slider
+            Grid::TrackInfo(Grid::Px(140)),  // Octave slider
+            Grid::TrackInfo(Grid::Px(170)),  // Semitone slider
+            Grid::TrackInfo(Grid::Fr(1))     // Filler
+        };
+        // 1 header row + 6 string rows
+        grid.templateRows.clear();
+        grid.templateRows.add(Grid::TrackInfo(Grid::Px(26))); // header
+        for (int i = 0; i < 6; ++i)
+            grid.templateRows.add(Grid::TrackInfo(Grid::Px(34)));
 
-        for (int i = 0; i < 3; ++i)
+        // Header row (blank at column 0, then labels)
+        grid.items.add(juce::GridItem().withArea(1,1));
+        grid.items.add(juce::GridItem(velHeaderLabel).withArea(1,2));
+        grid.items.add(juce::GridItem(octHeaderLabel).withArea(1,3));
+        grid.items.add(juce::GridItem(semiHeaderLabel).withArea(1,4));
+        grid.items.add(juce::GridItem().withArea(1,5));
+
+        // String rows
+        for (int i = 0; i < 6; ++i)
         {
-            grid.items.add(juce::GridItem(*stringVelocityLabels[i]));
-            grid.items.add(juce::GridItem(*stringVelocitySliders[i]));
-            grid.items.add(juce::GridItem(*stringVelocityLabels[i+3]));
-            grid.items.add(juce::GridItem(*stringVelocitySliders[i+3]));
+            int row = i + 2;
+            grid.items.add(juce::GridItem(*stringVelocityLabels[i]).withArea(row,1));
+            grid.items.add(juce::GridItem(*stringVelocitySliders[i]).withArea(row,2));
+            grid.items.add(juce::GridItem(*stringOctaveSliders[i]).withArea(row,3));
+            grid.items.add(juce::GridItem(*stringSemitoneSliders[i]).withArea(row,4));
+            grid.items.add(juce::GridItem().withArea(row,5));
         }
         grid.performLayout(velInner);
     }
@@ -236,7 +291,18 @@ void MainComponent::resized()
     {
         Grid grid;
         grid.rowGap = Grid::Px(6); grid.columnGap = Grid::Px(8);
-        grid.templateColumns = { Grid::TrackInfo(Grid::Px(140)), Grid::TrackInfo(Grid::Px(120)), Grid::TrackInfo(Grid::Px(10)), Grid::TrackInfo(Grid::Px(180)), Grid::TrackInfo(Grid::Px(10)), Grid::TrackInfo(Grid::Px(200)), Grid::TrackInfo(Grid::Fr(1)) };
+        grid.templateColumns = {
+            Grid::TrackInfo(Grid::Px(140)), // label
+            Grid::TrackInfo(Grid::Px(120)), // root
+            Grid::TrackInfo(Grid::Px(10)),
+            Grid::TrackInfo(Grid::Px(180)), // scale type
+            Grid::TrackInfo(Grid::Px(10)),
+            Grid::TrackInfo(Grid::Px(120)), // mode label
+            Grid::TrackInfo(Grid::Px(160)), // mode combo
+            Grid::TrackInfo(Grid::Px(10)),
+            Grid::TrackInfo(Grid::Px(200)), // filter toggle
+            Grid::TrackInfo(Grid::Fr(1))
+        };
         grid.templateRows = { Grid::TrackInfo(Grid::Px(30)) };
 
         grid.items.add(juce::GridItem(scaleLabel));
@@ -244,30 +310,16 @@ void MainComponent::resized()
         grid.items.add(juce::GridItem().withWidth(10));
         grid.items.add(juce::GridItem(scaleTypeCombo));
         grid.items.add(juce::GridItem().withWidth(10));
+        diatonicModeLabel.setJustificationType(juce::Justification::centredRight);
+        grid.items.add(juce::GridItem(diatonicModeLabel));
+        grid.items.add(juce::GridItem(diatonicModeCombo));
+        grid.items.add(juce::GridItem().withWidth(10));
         grid.items.add(juce::GridItem(filterEnableToggle));
         grid.items.add(juce::GridItem());
         grid.performLayout(scaleInner);
     }
 
-    // Logs area
-    {
-        auto area = logsArea;
-        statusLabel.setBounds(area.removeFromTop(20));
-        area.removeFromTop(5);
-        if (debugToggle.getToggleState())
-        {
-            auto half = area.getHeight() / 2;
-            messageList.setBounds(area.removeFromTop(half - 15));
-            area.removeFromTop(5);
-            debugLabel.setBounds(area.removeFromTop(20));
-            area.removeFromTop(5);
-            debugList.setBounds(area);
-        }
-        else
-        {
-            messageList.setBounds(area);
-        }
-    }
+    // Nessuna area logs
 }
 
 void MainComponent::timerCallback()
@@ -322,8 +374,22 @@ void MainComponent::refreshSerialPorts()
             serialCombo.setSelectedId(id - 1, juce::dontSendNotification);
     }
     
-    if (serialCombo.getSelectedId() == 0 && serialCombo.getNumItems() > 0)
-        serialCombo.setSelectedId(1, juce::dontSendNotification);
+    // Default to COM1 if available
+    if (serialCombo.getSelectedId() == 0)
+    {
+        int num = serialCombo.getNumItems();
+        for (int i = 2; i <= num; ++i)
+        {
+            auto txt = serialCombo.getItemText(i - 1);
+            if (txt.containsIgnoreCase("COM1"))
+            {
+                serialCombo.setSelectedId(i, juce::dontSendNotification);
+                break;
+            }
+        }
+        if (serialCombo.getSelectedId() == 0 && serialCombo.getNumItems() > 0)
+            serialCombo.setSelectedId(1, juce::dontSendNotification);
+    }
 }
 
 void MainComponent::refreshMidiInputs()
@@ -344,8 +410,21 @@ void MainComponent::refreshMidiInputs()
             midiInCombo.setSelectedId(id - 1, juce::dontSendNotification);
     }
     
-    if (midiInCombo.getSelectedId() == 0 && midiInCombo.getNumItems() > 0)
-        midiInCombo.setSelectedId(1, juce::dontSendNotification);
+    // Default to "TriplePlay Express" if available
+    if (midiInCombo.getSelectedId() == 0)
+    {
+        int num = midiInCombo.getNumItems();
+        for (int i = 2; i <= num; ++i)
+        {
+            if (midiInCombo.getItemText(i - 1).equalsIgnoreCase("TriplePlay Express"))
+            {
+                midiInCombo.setSelectedId(i, juce::dontSendNotification);
+                break;
+            }
+        }
+        if (midiInCombo.getSelectedId() == 0 && midiInCombo.getNumItems() > 0)
+            midiInCombo.setSelectedId(1, juce::dontSendNotification);
+    }
 }
 
 void MainComponent::refreshMidiOutputs()
@@ -366,8 +445,21 @@ void MainComponent::refreshMidiOutputs()
             midiOutCombo.setSelectedId(id - 1, juce::dontSendNotification);
     }
     
-    if (midiOutCombo.getSelectedId() == 0 && midiOutCombo.getNumItems() > 0)
-        midiOutCombo.setSelectedId(1, juce::dontSendNotification);
+    // Default to "PythonToReaper" if available
+    if (midiOutCombo.getSelectedId() == 0)
+    {
+        int num = midiOutCombo.getNumItems();
+        for (int i = 2; i <= num; ++i)
+        {
+            if (midiOutCombo.getItemText(i - 1).equalsIgnoreCase("PythonToReaper"))
+            {
+                midiOutCombo.setSelectedId(i, juce::dontSendNotification);
+                break;
+            }
+        }
+        if (midiOutCombo.getSelectedId() == 0 && midiOutCombo.getNumItems() > 0)
+            midiOutCombo.setSelectedId(1, juce::dontSendNotification);
+    }
 }
 
 void MainComponent::onBridgeToggled()
@@ -484,6 +576,18 @@ void MainComponent::onVelocitySliderChanged(int stringIndex)
         bridge.setStringVelocityScale(stringIndex, (int) s->getValue());
 }
 
+void MainComponent::onOctaveSliderChanged(int stringIndex)
+{
+    if (auto* s = stringOctaveSliders[stringIndex])
+        bridge.setStringOctaveShift(stringIndex, (int) s->getValue());
+}
+
+void MainComponent::onSemitoneSliderChanged(int stringIndex)
+{
+    if (auto* s = stringSemitoneSliders[stringIndex])
+        bridge.setStringSemitoneShift(stringIndex, (int) s->getValue());
+}
+
 static juce::Array<int> intervalsForScaleType(int scaleTypeId)
 {
     // Return interval set (in semitones from root) for various modes
@@ -519,5 +623,42 @@ void MainComponent::onScaleChanged()
 
 void MainComponent::onFilterToggle()
 {
-    bridge.setFilterEnabled(filterEnableToggle.getToggleState());
+    bool on = filterEnableToggle.getToggleState();
+    bridge.setFilterEnabled(on);
+    // Keep mode consistent: if turned off, set mode Off; if on and mode Off, switch to Filter
+    if (!on)
+    {
+        diatonicModeCombo.setSelectedId(1, juce::dontSendNotification); // Off
+        bridge.setDiatonicMode(MidiSerialBridge::DiatonicMode::Off);
+    }
+    else if (diatonicModeCombo.getSelectedId() == 1)
+    {
+        diatonicModeCombo.setSelectedId(2, juce::dontSendNotification); // Filter
+        bridge.setDiatonicMode(MidiSerialBridge::DiatonicMode::Filter);
+    }
+}
+
+void MainComponent::onDiatonicModeChanged()
+{
+    int id = diatonicModeCombo.getSelectedId();
+    switch (id)
+    {
+        case 1: // Off
+            bridge.setDiatonicMode(MidiSerialBridge::DiatonicMode::Off);
+            filterEnableToggle.setToggleState(false, juce::dontSendNotification);
+            bridge.setFilterEnabled(false);
+            break;
+        case 2: // Filter
+            bridge.setDiatonicMode(MidiSerialBridge::DiatonicMode::Filter);
+            filterEnableToggle.setToggleState(true, juce::dontSendNotification);
+            bridge.setFilterEnabled(true);
+            break;
+        case 3: // ReplaceUp
+            bridge.setDiatonicMode(MidiSerialBridge::DiatonicMode::ReplaceUp);
+            filterEnableToggle.setToggleState(true, juce::dontSendNotification);
+            bridge.setFilterEnabled(true);
+            break;
+        default:
+            break;
+    }
 }

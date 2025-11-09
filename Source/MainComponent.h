@@ -122,15 +122,27 @@ private:
     // Per-string velocity sliders (6 strings)
     juce::OwnedArray<juce::Slider> stringVelocitySliders;
     juce::OwnedArray<juce::Label> stringVelocityLabels;
+    // Per-string octave and semitone tuning
+    juce::OwnedArray<juce::Slider> stringOctaveSliders;   // -4..+4
+    juce::OwnedArray<juce::Slider> stringSemitoneSliders; // -12..+12
+    // Column header labels for the tuning/velocity grid
+    juce::Label velHeaderLabel;
+    juce::Label octHeaderLabel;
+    juce::Label semiHeaderLabel;
 
     // Scale selection UI
     juce::ComboBox rootNoteCombo; // C..B
     juce::ComboBox scaleTypeCombo; // Major, Minor (extendable)
     juce::ToggleButton filterEnableToggle; // enable diatonic filtering
     juce::Label scaleLabel;
+    juce::ComboBox diatonicModeCombo; // Off / Filter / ReplaceUp
+    juce::Label diatonicModeLabel;
 
     void initialiseScaleUI();
     void applyScaleToBridge();
+    void onOctaveSliderChanged(int stringIndex);
+    void onSemitoneSliderChanged(int stringIndex);
+    void onDiatonicModeChanged();
 
     // Modern look and feel instance
     ModernLookAndFeel modernLnF;

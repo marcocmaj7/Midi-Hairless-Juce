@@ -7,7 +7,11 @@ MidiSerialBridge::MidiSerialBridge()
 {
     // Defaults: all velocity scales at 10 (unity)
     for (int i = 0; i < 6; ++i)
+    {
         stringVelocityScale[i] = 10;
+        octaveShift[i] = 0;
+        semitoneShift[i] = 0;
+    }
     rootNotePc = 0; // C
     for (int i = 0; i < 12; ++i)
         diatonicMask[i] = true; // initially allow all notes (chromatic)
@@ -464,6 +468,20 @@ void MidiSerialBridge::setScale(int rootNote, const juce::Array<int>& intervals)
     }
 }
 
+void MidiSerialBridge::setStringOctaveShift(int stringIndex, int shift)
+{
+    if (stringIndex < 0 || stringIndex >= 6) return;
+    shift = juce::jlimit(-4, 4, shift);
+    octaveShift[stringIndex] = shift;
+}
+
+void MidiSerialBridge::setStringSemitoneShift(int stringIndex, int shift)
+{
+    if (stringIndex < 0 || stringIndex >= 6) return;
+    shift = juce::jlimit(-12, 12, shift);
+    semitoneShift[stringIndex] = shift;
+}
+
 juce::String MidiSerialBridge::getScaleDescription() const
 {
     static const char* names[] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
@@ -500,11 +518,44 @@ bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original,
     {
         int channel = original.getChannel() - 1; // convert to 0-based
         int note = original.getNoteNumber();
+        // Apply per-string tuning (octave and semitone)
+        if (channel >= 0 && channel < 6)
+        {
+            note += (octaveShift[channel] * 12) + semitoneShift[channel];
+            note = juce::jlimit(0, 127, note);
+        }
+
         if (shouldFilterOutNote(note))
         {
-            // Mark suppressed so matching NoteOff also filtered
-            suppressedNotes.insert((channel << 8) | note);
-            return false;
+            if (diatonicMode == DiatonicMode::ReplaceUp)
+            {
+                // Replace with next higher diatonic pitch class within MIDI range
+                int nn = note;
+                for (int step = 1; step <= 12; ++step)
+                {
+                    int candidate = note + step;
+                    if (candidate > 127) break;
+                    int pc = ((candidate % 12) + 12) % 12;
+                    if (diatonicMask[pc]) { nn = candidate; break; }
+                }
+                if (nn != note)
+                {
+                    replacedNotes[(channel << 8) | note] = nn;
+                    note = nn;
+                }
+                else
+                {
+                    // fallback: drop if no replacement found
+                    suppressedNotes.insert((channel << 8) | note);
+                    return false;
+                }
+            }
+            else
+            {
+                // Mark suppressed so matching NoteOff also filtered
+                suppressedNotes.insert((channel << 8) | note);
+                return false;
+            }
         }
         int vel = applyVelocityScaling(channel, (int) original.getVelocity());
         transformed = juce::MidiMessage::noteOn(channel + 1, note, (juce::uint8) vel);
@@ -515,6 +566,24 @@ bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original,
     {
         int channel = original.getChannel() - 1;
         int note = original.getNoteNumber();
+        // Account for per-string tuning shifts for matching
+        if (channel >= 0 && channel < 6)
+        {
+            int shifted = note + (octaveShift[channel] * 12) + semitoneShift[channel];
+            shifted = juce::jlimit(0, 127, shifted);
+            // If we had replaced this note-on, map back
+            auto keyOrig = (channel << 8) | note;
+            auto it = replacedNotes.find(keyOrig);
+            if (it != replacedNotes.end())
+            {
+                note = it->second; // send note-off for the replaced note
+                replacedNotes.erase(it);
+            }
+            else
+            {
+                note = shifted;
+            }
+        }
         int key = (channel << 8) | note;
         if (suppressedNotes.find(key) != suppressedNotes.end())
         {
@@ -522,7 +591,8 @@ bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original,
             suppressedNotes.erase(key);
             return false;
         }
-        transformed = original; // pass through note-off unchanged
+        transformed = juce::MidiMessage::noteOff(channel + 1, note);
+        transformed.setTimeStamp(original.getTimeStamp());
         return true;
     }
     else

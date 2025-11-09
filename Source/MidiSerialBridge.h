@@ -43,6 +43,14 @@ public:
     void setFilterEnabled(bool enabled) { filterEnabled = enabled; }
     bool getFilterEnabled() const { return filterEnabled; }
 
+    enum class DiatonicMode { Off = 0, Filter = 1, ReplaceUp = 2 };
+    void setDiatonicMode(DiatonicMode m) { diatonicMode = m; }
+    DiatonicMode getDiatonicMode() const { return diatonicMode; }
+
+    // Per-string tuning setters
+    void setStringOctaveShift(int stringIndex, int shift);
+    void setStringSemitoneShift(int stringIndex, int shift);
+
     // Utility to describe current scale
     juce::String getScaleDescription() const;
     
@@ -110,10 +118,14 @@ private:
 
     // Runtime settings -------------------------------------------------------
     int stringVelocityScale[6]; // 1..10 values, mapped to velocity multiplier
+    int octaveShift[6]; // -4..+4
+    int semitoneShift[6]; // -12..12
     int rootNotePc; // 0..11
     bool diatonicMask[12]; // allowed pitch classes
     bool filterEnabled { false };
+    DiatonicMode diatonicMode { DiatonicMode::Filter };
     std::unordered_set<int> suppressedNotes; // store (channel<<8)|note for which NoteOn was filtered, so we also drop NoteOff
+    std::unordered_map<int,int> replacedNotes; // original key -> replaced note
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiSerialBridge)
 };
