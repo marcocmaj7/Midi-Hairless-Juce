@@ -11,6 +11,7 @@ MidiSerialBridge::MidiSerialBridge()
         stringVelocityScale[i] = 10;
         octaveShift[i] = 0;
         semitoneShift[i] = 0;
+        channelMap[i] = i + 1; // default: strings map to channels 1..6
     }
     rootNotePc = 0; // C
     for (int i = 0; i < 12; ++i)
@@ -514,14 +515,33 @@ int MidiSerialBridge::applyVelocityScaling(int channel, int velocity) const
 
 bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original, juce::MidiMessage& transformed)
 {
+    const int msgChannel0 = original.getChannel() - 1;
+    // Resolve string index from configured channel map
+    int stringIndex = -1;
+    if (msgChannel0 >= 0)
+    {
+        int msgChannel1 = msgChannel0 + 1;
+        for (int i = 0; i < 6; ++i)
+        {
+            if (channelMap[i] == msgChannel1)
+            {
+                stringIndex = i;
+                break;
+            }
+        }
+        // Fallback to direct mapping if not found
+        if (stringIndex < 0 && msgChannel0 >= 0 && msgChannel0 < 6)
+            stringIndex = msgChannel0;
+    }
+
     if (original.isNoteOn())
     {
-        int channel = original.getChannel() - 1; // convert to 0-based
+        int channel = msgChannel0; // 0-based
         int note = original.getNoteNumber();
         // Apply per-string tuning (octave and semitone)
-        if (channel >= 0 && channel < 6)
+        if (stringIndex >= 0)
         {
-            note += (octaveShift[channel] * 12) + semitoneShift[channel];
+            note += (octaveShift[stringIndex] * 12) + semitoneShift[stringIndex];
             note = juce::jlimit(0, 127, note);
         }
 
@@ -557,19 +577,19 @@ bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original,
                 return false;
             }
         }
-        int vel = applyVelocityScaling(channel, (int) original.getVelocity());
+        int vel = applyVelocityScaling(stringIndex >= 0 ? stringIndex : channel, (int) original.getVelocity());
         transformed = juce::MidiMessage::noteOn(channel + 1, note, (juce::uint8) vel);
         transformed.setTimeStamp(original.getTimeStamp());
         return true;
     }
     else if (original.isNoteOff())
     {
-        int channel = original.getChannel() - 1;
+        int channel = msgChannel0;
         int note = original.getNoteNumber();
         // Account for per-string tuning shifts for matching
-        if (channel >= 0 && channel < 6)
+        if (stringIndex >= 0)
         {
-            int shifted = note + (octaveShift[channel] * 12) + semitoneShift[channel];
+            int shifted = note + (octaveShift[stringIndex] * 12) + semitoneShift[stringIndex];
             shifted = juce::jlimit(0, 127, shifted);
             // If we had replaced this note-on, map back
             auto keyOrig = (channel << 8) | note;
@@ -601,4 +621,17 @@ bool MidiSerialBridge::processOutgoingMessage(const juce::MidiMessage& original,
         transformed = original;
         return true;
     }
+}
+
+void MidiSerialBridge::setStringChannel(int stringIndex, int channel)
+{
+    if (stringIndex < 0 || stringIndex >= 6) return;
+    if (channel < 1 || channel > 16) channel = stringIndex + 1;
+    channelMap[stringIndex] = channel;
+}
+
+int MidiSerialBridge::getStringChannel(int stringIndex) const
+{
+    if (stringIndex < 0 || stringIndex >= 6) return 0;
+    return channelMap[stringIndex];
 }

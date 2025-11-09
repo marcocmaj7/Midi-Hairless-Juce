@@ -92,34 +92,56 @@ MainComponent::MainComponent()
         vel->setRange(1, 10, 1);
         vel->setValue(10, juce::dontSendNotification);
         vel->onValueChange = [this, i]() { onVelocitySliderChanged(i); };
+        vel->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 20);
+        vel->setNumDecimalPlacesToDisplay(0);
+        vel->setDoubleClickReturnValue(true, 10.0);
         stringVelocitySliders.add(vel);
         addAndMakeVisible(vel);
 
-        auto* oct = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        auto* oct = new juce::Slider(juce::Slider::IncDecButtons, juce::Slider::TextBoxRight);
         oct->setRange(-4, 4, 1);
         oct->setValue(0, juce::dontSendNotification);
         oct->onValueChange = [this, i]() { onOctaveSliderChanged(i); };
+        oct->setTextBoxStyle(juce::Slider::TextBoxRight, false, 48, 20);
+        oct->setNumDecimalPlacesToDisplay(0);
+        oct->setIncDecButtonsMode(juce::Slider::incDecButtonsNotDraggable);
+        oct->setDoubleClickReturnValue(true, 0.0);
         stringOctaveSliders.add(oct);
         addAndMakeVisible(oct);
 
-        auto* semi = new juce::Slider(juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight);
+        auto* semi = new juce::Slider(juce::Slider::IncDecButtons, juce::Slider::TextBoxRight);
         semi->setRange(-12, 12, 1);
         semi->setValue(0, juce::dontSendNotification);
         semi->onValueChange = [this, i]() { onSemitoneSliderChanged(i); };
+        semi->setTextBoxStyle(juce::Slider::TextBoxRight, false, 56, 20);
+        semi->setNumDecimalPlacesToDisplay(0);
+        semi->setIncDecButtonsMode(juce::Slider::incDecButtonsNotDraggable);
+        semi->setDoubleClickReturnValue(true, 0.0);
         stringSemitoneSliders.add(semi);
         addAndMakeVisible(semi);
+
+        auto* ch = new juce::ComboBox();
+        for (int chNum = 1; chNum <= 16; ++chNum)
+            ch->addItem(juce::String(chNum), chNum);
+        ch->setSelectedId(i + 1, juce::dontSendNotification); // default sequential mapping
+        ch->onChange = [this, i]() { onChannelComboChanged(i); };
+        stringChannelCombos.add(ch);
+        addAndMakeVisible(ch);
     }
 
     // Column headers
-    velHeaderLabel.setText("Velocity", juce::dontSendNotification);
+    velHeaderLabel.setText("Vel", juce::dontSendNotification);
     velHeaderLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(velHeaderLabel);
-    octHeaderLabel.setText("Octave", juce::dontSendNotification);
+    octHeaderLabel.setText("Oct", juce::dontSendNotification);
     octHeaderLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(octHeaderLabel);
-    semiHeaderLabel.setText("Semitone", juce::dontSendNotification);
+    semiHeaderLabel.setText("Semi", juce::dontSendNotification);
     semiHeaderLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(semiHeaderLabel);
+    chHeaderLabel.setText("Ch", juce::dontSendNotification);
+    chHeaderLabel.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(chHeaderLabel);
 
     // Scale UI
     scaleLabel.setText("Scala di Riferimento:", juce::dontSendNotification);
@@ -189,7 +211,7 @@ void MainComponent::resized()
 
     // Panels heights (niente sezione logs)
     auto connectionArea = outer.removeFromTop(150);
-    auto midArea = outer.removeFromTop(300);
+    auto midArea = outer.removeFromTop(280);
     auto scaleArea = outer.removeFromTop(110);
 
     // Connection panel bounds and inner layout
@@ -251,26 +273,28 @@ void MainComponent::resized()
     auto velInner = midArea.reduced(12).withTrimmedTop(26);
     {
         Grid grid;
-        grid.rowGap = Grid::Px(4); grid.columnGap = Grid::Px(8);
+        grid.rowGap = Grid::Px(4); grid.columnGap = Grid::Px(6);
         grid.templateColumns = {
             Grid::TrackInfo(Grid::Px(90)),   // String name
-            Grid::TrackInfo(Grid::Px(170)),  // Velocity slider
-            Grid::TrackInfo(Grid::Px(140)),  // Octave slider
-            Grid::TrackInfo(Grid::Px(170)),  // Semitone slider
+            Grid::TrackInfo(Grid::Fr(1)),    // Velocity slider
+            Grid::TrackInfo(Grid::Px(70)),   // Channel combo
+            Grid::TrackInfo(Grid::Px(120)),  // Octave inc/dec
+            Grid::TrackInfo(Grid::Px(140)),  // Semitone inc/dec
             Grid::TrackInfo(Grid::Fr(1))     // Filler
         };
-        // 1 header row + 6 string rows
+        // 1 header row + 6 string rows (compact heights)
         grid.templateRows.clear();
         grid.templateRows.add(Grid::TrackInfo(Grid::Px(26))); // header
         for (int i = 0; i < 6; ++i)
-            grid.templateRows.add(Grid::TrackInfo(Grid::Px(34)));
+            grid.templateRows.add(Grid::TrackInfo(Grid::Px(30)));
 
         // Header row (blank at column 0, then labels)
-        grid.items.add(juce::GridItem().withArea(1,1));
-        grid.items.add(juce::GridItem(velHeaderLabel).withArea(1,2));
-        grid.items.add(juce::GridItem(octHeaderLabel).withArea(1,3));
-        grid.items.add(juce::GridItem(semiHeaderLabel).withArea(1,4));
-        grid.items.add(juce::GridItem().withArea(1,5));
+    grid.items.add(juce::GridItem().withArea(1,1));
+    grid.items.add(juce::GridItem(velHeaderLabel).withArea(1,2));
+    grid.items.add(juce::GridItem(chHeaderLabel).withArea(1,3));
+    grid.items.add(juce::GridItem(octHeaderLabel).withArea(1,4));
+    grid.items.add(juce::GridItem(semiHeaderLabel).withArea(1,5));
+    grid.items.add(juce::GridItem().withArea(1,6));
 
         // String rows
         for (int i = 0; i < 6; ++i)
@@ -278,9 +302,10 @@ void MainComponent::resized()
             int row = i + 2;
             grid.items.add(juce::GridItem(*stringVelocityLabels[i]).withArea(row,1));
             grid.items.add(juce::GridItem(*stringVelocitySliders[i]).withArea(row,2));
-            grid.items.add(juce::GridItem(*stringOctaveSliders[i]).withArea(row,3));
-            grid.items.add(juce::GridItem(*stringSemitoneSliders[i]).withArea(row,4));
-            grid.items.add(juce::GridItem().withArea(row,5));
+            grid.items.add(juce::GridItem(*stringChannelCombos[i]).withArea(row,3));
+            grid.items.add(juce::GridItem(*stringOctaveSliders[i]).withArea(row,4));
+            grid.items.add(juce::GridItem(*stringSemitoneSliders[i]).withArea(row,5));
+            grid.items.add(juce::GridItem().withArea(row,6));
         }
         grid.performLayout(velInner);
     }
@@ -586,6 +611,15 @@ void MainComponent::onSemitoneSliderChanged(int stringIndex)
 {
     if (auto* s = stringSemitoneSliders[stringIndex])
         bridge.setStringSemitoneShift(stringIndex, (int) s->getValue());
+}
+
+void MainComponent::onChannelComboChanged(int stringIndex)
+{
+    if (auto* cb = stringChannelCombos[stringIndex])
+    {
+        int ch = cb->getSelectedId();
+        bridge.setStringChannel(stringIndex, ch);
+    }
 }
 
 static juce::Array<int> intervalsForScaleType(int scaleTypeId)

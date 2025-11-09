@@ -129,6 +129,8 @@ private:
     juce::Label velHeaderLabel;
     juce::Label octHeaderLabel;
     juce::Label semiHeaderLabel;
+    juce::Label chHeaderLabel;
+    juce::OwnedArray<juce::ComboBox> stringChannelCombos;
 
     // Scale selection UI
     juce::ComboBox rootNoteCombo; // C..B
@@ -143,6 +145,7 @@ private:
     void onOctaveSliderChanged(int stringIndex);
     void onSemitoneSliderChanged(int stringIndex);
     void onDiatonicModeChanged();
+    void onChannelComboChanged(int stringIndex);
 
     // Modern look and feel instance
     ModernLookAndFeel modernLnF;

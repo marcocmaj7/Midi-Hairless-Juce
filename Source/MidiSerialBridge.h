@@ -50,6 +50,9 @@ public:
     // Per-string tuning setters
     void setStringOctaveShift(int stringIndex, int shift);
     void setStringSemitoneShift(int stringIndex, int shift);
+    // Map a string (index 0..5) to a MIDI channel (1..16). If unset uses direct index+1.
+    void setStringChannel(int stringIndex, int channel);
+    int  getStringChannel(int stringIndex) const;
 
     // Utility to describe current scale
     juce::String getScaleDescription() const;
@@ -120,6 +123,7 @@ private:
     int stringVelocityScale[6]; // 1..10 values, mapped to velocity multiplier
     int octaveShift[6]; // -4..+4
     int semitoneShift[6]; // -12..12
+    int channelMap[6]; // 1..16 (0 means use stringIndex+1)
     int rootNotePc; // 0..11
     bool diatonicMask[12]; // allowed pitch classes
     bool filterEnabled { false };
