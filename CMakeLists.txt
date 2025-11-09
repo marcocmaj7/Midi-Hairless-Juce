@@ -41,6 +41,8 @@ target_sources(HairlessMidiSerial PRIVATE
     Source/MidiSerialBridge.cpp
     Source/SerialPortManager.h
     Source/SerialPortManager.cpp
+    Source/ModernLookAndFeel.h
+    Source/ModernLookAndFeel.cpp
 )
 
 # Link JUCE modules

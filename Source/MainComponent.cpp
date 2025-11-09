@@ -8,9 +8,13 @@ MainComponent::MainComponent()
     , midiOutBlinkCounter(0)
     , serialBlinkCounter(0)
 {
+    // Look and Feel
+    juce::LookAndFeel::setDefaultLookAndFeel(&modernLnF);
+
     // Setup labels
     serialLabel.setText("Serial Port:", juce::dontSendNotification);
     serialLabel.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(connectionPanel);
     addAndMakeVisible(serialLabel);
     
     midiInLabel.setText("MIDI In:", juce::dontSendNotification);
@@ -51,6 +55,9 @@ MainComponent::MainComponent()
     messageList.setScrollbarsShown(true);
     messageList.setCaretVisible(false);
     messageList.setPopupMenuEnabled(true);
+    messageList.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff242730));
+    messageList.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x223b3f4a));
+    messageList.applyFontToAllText(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, 0));
     addAndMakeVisible(messageList);
     
     debugList.setMultiLine(true);
@@ -59,6 +66,9 @@ MainComponent::MainComponent()
     debugList.setCaretVisible(false);
     debugList.setPopupMenuEnabled(true);
     debugList.setVisible(false);
+    debugList.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff242730));
+    debugList.setColour(juce::TextEditor::outlineColourId, juce::Colour(0x223b3f4a));
+    debugList.applyFontToAllText(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, 0));
     addAndMakeVisible(debugList);
     
     // Setup LEDs
@@ -84,6 +94,10 @@ MainComponent::MainComponent()
     bridge.onMidiSent = [this]() { midiOutBlinkCounter = LED_BLINK_DURATION; };
     bridge.onSerialTraffic = [this]() { serialBlinkCounter = LED_BLINK_DURATION; };
     
+    // Panels for Velocity & Scale
+    addAndMakeVisible(velocityPanel);
+    addAndMakeVisible(scalePanel);
+
     // Per-string velocity sliders (6)
     static const char* stringNames[6] = { "6: Low E", "5: A", "4: D", "3: G", "2: B", "1: High E" };
     for (int i = 0; i < 6; ++i)
@@ -132,7 +146,7 @@ MainComponent::MainComponent()
     // Start timer for UI updates (50ms = 20Hz)
     startTimer(50);
     
-    setSize(700, 600);
+    setSize(800, 640);
 }
 
 MainComponent::~MainComponent()
@@ -142,119 +156,117 @@ MainComponent::~MainComponent()
 
 void MainComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+    auto bg = getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId);
+    g.fillAll(bg);
+    // Optional subtle vertical gradient overlay for depth
+    juce::Colour top = bg.brighter(0.05f);
+    juce::Colour bottom = bg.darker(0.05f);
+    g.setGradientFill(juce::ColourGradient(top, 0.0f, 0.0f, bottom, 0.0f, (float)getHeight(), false));
+    g.fillRect(getLocalBounds());
 }
 
 void MainComponent::resized()
 {
-    auto bounds = getLocalBounds().reduced(10);
-    
-    // Top section - Port selection
-    auto topSection = bounds.removeFromTop(120);
-    
-    // Serial port row
-    auto serialRow = topSection.removeFromTop(30);
-    serialLabel.setBounds(serialRow.removeFromLeft(100));
-    serialRow.removeFromLeft(5);
-    serialCombo.setBounds(serialRow);
-    
-    topSection.removeFromTop(5);
-    
-    // MIDI In row
-    auto midiInRow = topSection.removeFromTop(30);
-    midiInLabel.setBounds(midiInRow.removeFromLeft(100));
-    midiInRow.removeFromLeft(5);
-    midiInCombo.setBounds(midiInRow);
-    
-    topSection.removeFromTop(5);
-    
-    // MIDI Out row
-    auto midiOutRow = topSection.removeFromTop(30);
-    midiOutLabel.setBounds(midiOutRow.removeFromLeft(100));
-    midiOutRow.removeFromLeft(5);
-    midiOutCombo.setBounds(midiOutRow);
-    
-    topSection.removeFromTop(5);
-    
-    // Toggle buttons row
-    auto toggleRow = topSection.removeFromTop(30);
-    bridgeToggle.setBounds(toggleRow.removeFromLeft(150));
-    toggleRow.removeFromLeft(10);
-    debugToggle.setBounds(toggleRow.removeFromLeft(200));
-    
-    bounds.removeFromTop(10);
-    
-    // LED indicators
-    auto ledSection = bounds.removeFromTop(60);
-    int ledWidth = ledSection.getWidth() / 3;
-    
-    auto midiInLEDArea = ledSection.removeFromLeft(ledWidth);
-    midiInLED.setBounds(midiInLEDArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-    midiInLEDLabel.setBounds(midiInLEDArea);
-    
-    auto midiOutLEDArea = ledSection.removeFromLeft(ledWidth);
-    midiOutLED.setBounds(midiOutLEDArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-    midiOutLEDLabel.setBounds(midiOutLEDArea);
-    
-    auto serialLEDArea = ledSection.removeFromLeft(ledWidth);
-    serialLED.setBounds(serialLEDArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
-    serialLEDLabel.setBounds(serialLEDArea);
-    
-    bounds.removeFromTop(10);
-    
-    // Velocity sliders grid (2 columns x 3 rows)
-    auto velSection = bounds.removeFromTop(140);
-    auto colLeft = velSection.removeFromLeft(velSection.getWidth() / 2).reduced(0, 5);
-    auto colRight = velSection.reduced(10, 5);
-    for (int i = 0; i < 3; ++i)
+    using juce::Grid;
+    auto outer = getLocalBounds().reduced(12);
+
+    // Panels heights
+    auto connectionArea = outer.removeFromTop(150);
+    auto midArea = outer.removeFromTop(210);
+    auto scaleArea = outer.removeFromTop(80);
+    auto logsArea = outer;
+
+    // Connection panel bounds and inner layout
+    connectionPanel.setBounds(connectionArea);
+    auto connInner = connectionArea.reduced(12);
     {
-        auto row = colLeft.removeFromTop(40);
-        stringVelocityLabels[i]->setBounds(row.removeFromLeft(110));
-        row.removeFromLeft(5);
-        stringVelocitySliders[i]->setBounds(row);
-        colLeft.removeFromTop(5);
-    }
-    for (int i = 3; i < 6; ++i)
-    {
-        auto row = colRight.removeFromTop(40);
-        stringVelocityLabels[i]->setBounds(row.removeFromLeft(110));
-        row.removeFromLeft(5);
-        stringVelocitySliders[i]->setBounds(row);
-        colRight.removeFromTop(5);
+        Grid grid;
+        grid.rowGap = Grid::Px(6);
+        grid.columnGap = Grid::Px(8);
+        grid.templateColumns = { Grid::TrackInfo(Grid::Px(120)), Grid::TrackInfo(Grid::Fr(1)) };
+        grid.templateRows = { Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)), Grid::TrackInfo(Grid::Px(30)) };
+
+        auto place = [&](juce::Component& c){ grid.items.add(juce::GridItem(c)); };
+        place(serialLabel); place(serialCombo);
+        place(midiInLabel); place(midiInCombo);
+        place(midiOutLabel); place(midiOutCombo);
+        place(bridgeToggle); place(debugToggle);
+
+        grid.performLayout(connInner);
     }
 
-    bounds.removeFromTop(5);
-
-    // Scale controls row
-    auto scaleRow1 = bounds.removeFromTop(30);
-    scaleLabel.setBounds(scaleRow1.removeFromLeft(140));
-    scaleRow1.removeFromLeft(5);
-    rootNoteCombo.setBounds(scaleRow1.removeFromLeft(120));
-    scaleRow1.removeFromLeft(10);
-    scaleTypeCombo.setBounds(scaleRow1.removeFromLeft(180));
-    scaleRow1.removeFromLeft(10);
-    filterEnableToggle.setBounds(scaleRow1.removeFromLeft(200));
-
-    bounds.removeFromTop(10);
-
-    // Message lists
-    statusLabel.setBounds(bounds.removeFromTop(20));
-    bounds.removeFromTop(5);
-    
-    if (debugToggle.getToggleState())
+    // LED strip inside connection panel, at bottom
     {
-        // Show both message lists
-        auto halfHeight = bounds.getHeight() / 2;
-        messageList.setBounds(bounds.removeFromTop(halfHeight - 15));
-        bounds.removeFromTop(5);
-        debugLabel.setBounds(bounds.removeFromTop(20));
-        bounds.removeFromTop(5);
-        debugList.setBounds(bounds);
+        auto ledSection = connectionArea.reduced(12);
+        ledSection = ledSection.removeFromBottom(56);
+        int ledWidth = ledSection.getWidth() / 3;
+        auto inArea = ledSection.removeFromLeft(ledWidth);
+        midiInLED.setBounds(inArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
+        midiInLEDLabel.setBounds(inArea);
+        auto outArea = ledSection.removeFromLeft(ledWidth);
+        midiOutLED.setBounds(outArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
+        midiOutLEDLabel.setBounds(outArea);
+        auto serArea = ledSection.removeFromLeft(ledWidth);
+        serialLED.setBounds(serArea.removeFromTop(30).withSizeKeepingCentre(24, 24));
+        serialLEDLabel.setBounds(serArea);
     }
-    else
+
+    // Velocity panel
+    velocityPanel.setBounds(midArea);
+    auto velInner = midArea.reduced(12).withTrimmedTop(26);
     {
-        // Show only status messages
-        messageList.setBounds(bounds);
+        Grid grid;
+        grid.rowGap = Grid::Px(6); grid.columnGap = Grid::Px(8);
+        grid.templateColumns = { Grid::TrackInfo(Grid::Px(110)), Grid::TrackInfo(Grid::Fr(1)), Grid::TrackInfo(Grid::Px(110)), Grid::TrackInfo(Grid::Fr(1)) };
+        grid.templateRows = { Grid::TrackInfo(Grid::Px(32)), Grid::TrackInfo(Grid::Px(32)), Grid::TrackInfo(Grid::Px(32)) };
+
+        for (int i = 0; i < 3; ++i)
+        {
+            grid.items.add(juce::GridItem(*stringVelocityLabels[i]));
+            grid.items.add(juce::GridItem(*stringVelocitySliders[i]));
+            grid.items.add(juce::GridItem(*stringVelocityLabels[i+3]));
+            grid.items.add(juce::GridItem(*stringVelocitySliders[i+3]));
+        }
+        grid.performLayout(velInner);
+    }
+
+    // Scale panel
+    scalePanel.setBounds(scaleArea);
+    auto scaleInner = scaleArea.reduced(12).withTrimmedTop(26);
+    {
+        Grid grid;
+        grid.rowGap = Grid::Px(6); grid.columnGap = Grid::Px(8);
+        grid.templateColumns = { Grid::TrackInfo(Grid::Px(140)), Grid::TrackInfo(Grid::Px(120)), Grid::TrackInfo(Grid::Px(10)), Grid::TrackInfo(Grid::Px(180)), Grid::TrackInfo(Grid::Px(10)), Grid::TrackInfo(Grid::Px(200)), Grid::TrackInfo(Grid::Fr(1)) };
+        grid.templateRows = { Grid::TrackInfo(Grid::Px(30)) };
+
+        grid.items.add(juce::GridItem(scaleLabel));
+        grid.items.add(juce::GridItem(rootNoteCombo));
+        grid.items.add(juce::GridItem().withWidth(10));
+        grid.items.add(juce::GridItem(scaleTypeCombo));
+        grid.items.add(juce::GridItem().withWidth(10));
+        grid.items.add(juce::GridItem(filterEnableToggle));
+        grid.items.add(juce::GridItem());
+        grid.performLayout(scaleInner);
+    }
+
+    // Logs area
+    {
+        auto area = logsArea;
+        statusLabel.setBounds(area.removeFromTop(20));
+        area.removeFromTop(5);
+        if (debugToggle.getToggleState())
+        {
+            auto half = area.getHeight() / 2;
+            messageList.setBounds(area.removeFromTop(half - 15));
+            area.removeFromTop(5);
+            debugLabel.setBounds(area.removeFromTop(20));
+            area.removeFromTop(5);
+            debugList.setBounds(area);
+        }
+        else
+        {
+            messageList.setBounds(area);
+        }
     }
 }
 

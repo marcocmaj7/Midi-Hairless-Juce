@@ -4,6 +4,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include "MidiSerialBridge.h"
+#include "ModernLookAndFeel.h"
 
 //==============================================================================
 class MainComponent : public juce::Component,
@@ -130,6 +131,48 @@ private:
 
     void initialiseScaleUI();
     void applyScaleToBridge();
+
+    // Modern look and feel instance
+    ModernLookAndFeel modernLnF;
+    juce::Font headingFont { "Rubik", 18.0f, juce::Font::bold };
+
+    // Background panel component
+    class CardPanel : public juce::Component
+    {
+    public:
+        CardPanel(const juce::String& title, juce::Font heading)
+            : headingText(title), headingFont(heading),
+              sh(juce::DropShadow(juce::Colours::black.withAlpha(0.35f), 12, juce::Point<int>(0, 2)))
+        {
+            sh.setOwner(this);
+        }
+
+        void paint(juce::Graphics& g) override
+        {
+            auto r = getLocalBounds().toFloat();
+            g.setColour(juce::Colour(0xFF242730));
+            g.fillRoundedRectangle(r, 10.0f);
+            g.setColour(juce::Colour(0x332e3440));
+            g.drawRoundedRectangle(r, 10.0f, 1.0f);
+
+            g.setColour(juce::Colours::whitesmoke);
+            g.setFont(headingFont);
+            auto header = r.removeFromTop(26);
+            g.drawText(headingText, header, juce::Justification::centredLeft, true);
+            // subtle divider under the title
+            g.setColour(juce::Colour(0x223b3f4a));
+            g.fillRect(header.removeFromBottom(1));
+        }
+
+    private:
+        juce::String headingText;
+        juce::Font headingFont;
+        juce::DropShadower sh;
+    };
+
+    CardPanel connectionPanel { "Connessioni", headingFont };
+    CardPanel velocityPanel { "Velocity Corde", headingFont };
+    CardPanel scalePanel { "Scala & Filtro", headingFont };
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
