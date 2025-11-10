@@ -129,8 +129,7 @@ private:
     juce::Label velHeaderLabel;
     juce::Label octHeaderLabel;
     juce::Label semiHeaderLabel;
-    juce::Label chHeaderLabel;
-    juce::OwnedArray<juce::ComboBox> stringChannelCombos;
+    // removed per-string channel column; single unified channel instead
 
     // Scale selection UI
     juce::ComboBox rootNoteCombo; // C..B
@@ -145,7 +144,12 @@ private:
     void onOctaveSliderChanged(int stringIndex);
     void onSemitoneSliderChanged(int stringIndex);
     void onDiatonicModeChanged();
-    void onChannelComboChanged(int stringIndex);
+
+    // Global controls
+    juce::Label globalOctaveLabel;
+    juce::Slider globalOctaveSlider; // -4..+4 for all strings
+    juce::Label unifiedChannelLabel;
+    juce::ComboBox unifiedChannelCombo; // 1..16 single output channel
 
     // Modern look and feel instance
     ModernLookAndFeel modernLnF;
@@ -186,7 +190,7 @@ private:
     };
 
     CardPanel connectionPanel { "Connessioni", headingFont };
-    CardPanel velocityPanel { "Velocity Corde", headingFont };
+    CardPanel velocityPanel { "Velocity & Tuning", headingFont };
     CardPanel scalePanel { "Scala & Filtro", headingFont };
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)

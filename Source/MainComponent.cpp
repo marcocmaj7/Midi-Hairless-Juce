@@ -119,14 +119,6 @@ MainComponent::MainComponent()
         semi->setDoubleClickReturnValue(true, 0.0);
         stringSemitoneSliders.add(semi);
         addAndMakeVisible(semi);
-
-        auto* ch = new juce::ComboBox();
-        for (int chNum = 1; chNum <= 16; ++chNum)
-            ch->addItem(juce::String(chNum), chNum);
-        ch->setSelectedId(i + 1, juce::dontSendNotification); // default sequential mapping
-        ch->onChange = [this, i]() { onChannelComboChanged(i); };
-        stringChannelCombos.add(ch);
-        addAndMakeVisible(ch);
     }
 
     // Column headers
@@ -139,9 +131,22 @@ MainComponent::MainComponent()
     semiHeaderLabel.setText("Semi", juce::dontSendNotification);
     semiHeaderLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(semiHeaderLabel);
-    chHeaderLabel.setText("Ch", juce::dontSendNotification);
-    chHeaderLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(chHeaderLabel);
+    // Global controls (added after per-string components)
+    globalOctaveLabel.setText("Octava Globale", juce::dontSendNotification);
+    addAndMakeVisible(globalOctaveLabel);
+    globalOctaveSlider.setRange(-4, 4, 1);
+    globalOctaveSlider.setSliderStyle(juce::Slider::IncDecButtons);
+    globalOctaveSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 56, 20);
+    globalOctaveSlider.setDoubleClickReturnValue(true, 0.0);
+    globalOctaveSlider.onValueChange = [this](){ bridge.setGlobalOctaveShift((int) globalOctaveSlider.getValue()); };
+    addAndMakeVisible(globalOctaveSlider);
+
+    unifiedChannelLabel.setText("Canale Unico", juce::dontSendNotification);
+    addAndMakeVisible(unifiedChannelLabel);
+    for (int ch = 1; ch <= 16; ++ch) unifiedChannelCombo.addItem(juce::String(ch), ch);
+    unifiedChannelCombo.setSelectedId(1, juce::dontSendNotification);
+    unifiedChannelCombo.onChange = [this](){ bridge.setUnifiedChannel(unifiedChannelCombo.getSelectedId()); };
+    addAndMakeVisible(unifiedChannelCombo);
 
     // Scale UI
     scaleLabel.setText("Scala di Riferimento:", juce::dontSendNotification);
@@ -211,7 +216,7 @@ void MainComponent::resized()
 
     // Panels heights (niente sezione logs)
     auto connectionArea = outer.removeFromTop(150);
-    auto midArea = outer.removeFromTop(280);
+    auto midArea = outer.removeFromTop(260); // slightly reduced
     auto scaleArea = outer.removeFromTop(110);
 
     // Connection panel bounds and inner layout
@@ -277,24 +282,23 @@ void MainComponent::resized()
         grid.templateColumns = {
             Grid::TrackInfo(Grid::Px(90)),   // String name
             Grid::TrackInfo(Grid::Fr(1)),    // Velocity slider
-            Grid::TrackInfo(Grid::Px(70)),   // Channel combo
             Grid::TrackInfo(Grid::Px(120)),  // Octave inc/dec
             Grid::TrackInfo(Grid::Px(140)),  // Semitone inc/dec
             Grid::TrackInfo(Grid::Fr(1))     // Filler
         };
         // 1 header row + 6 string rows (compact heights)
         grid.templateRows.clear();
-        grid.templateRows.add(Grid::TrackInfo(Grid::Px(26))); // header
+        grid.templateRows.add(Grid::TrackInfo(Grid::Px(22))); // header
         for (int i = 0; i < 6; ++i)
-            grid.templateRows.add(Grid::TrackInfo(Grid::Px(30)));
+            grid.templateRows.add(Grid::TrackInfo(Grid::Px(26)));
+        grid.templateRows.add(Grid::TrackInfo(Grid::Px(34))); // global controls row
 
         // Header row (blank at column 0, then labels)
     grid.items.add(juce::GridItem().withArea(1,1));
     grid.items.add(juce::GridItem(velHeaderLabel).withArea(1,2));
-    grid.items.add(juce::GridItem(chHeaderLabel).withArea(1,3));
-    grid.items.add(juce::GridItem(octHeaderLabel).withArea(1,4));
-    grid.items.add(juce::GridItem(semiHeaderLabel).withArea(1,5));
-    grid.items.add(juce::GridItem().withArea(1,6));
+    grid.items.add(juce::GridItem(octHeaderLabel).withArea(1,3));
+    grid.items.add(juce::GridItem(semiHeaderLabel).withArea(1,4));
+    grid.items.add(juce::GridItem().withArea(1,5));
 
         // String rows
         for (int i = 0; i < 6; ++i)
@@ -302,11 +306,17 @@ void MainComponent::resized()
             int row = i + 2;
             grid.items.add(juce::GridItem(*stringVelocityLabels[i]).withArea(row,1));
             grid.items.add(juce::GridItem(*stringVelocitySliders[i]).withArea(row,2));
-            grid.items.add(juce::GridItem(*stringChannelCombos[i]).withArea(row,3));
-            grid.items.add(juce::GridItem(*stringOctaveSliders[i]).withArea(row,4));
-            grid.items.add(juce::GridItem(*stringSemitoneSliders[i]).withArea(row,5));
-            grid.items.add(juce::GridItem().withArea(row,6));
+            grid.items.add(juce::GridItem(*stringOctaveSliders[i]).withArea(row,3));
+            grid.items.add(juce::GridItem(*stringSemitoneSliders[i]).withArea(row,4));
+            grid.items.add(juce::GridItem().withArea(row,5));
         }
+        // Global controls row (after strings)
+        int globalRow = 8;
+        grid.items.add(juce::GridItem(globalOctaveLabel).withArea(globalRow,1));
+        grid.items.add(juce::GridItem(globalOctaveSlider).withArea(globalRow,2));
+        grid.items.add(juce::GridItem(unifiedChannelLabel).withArea(globalRow,3));
+        grid.items.add(juce::GridItem(unifiedChannelCombo).withArea(globalRow,4));
+        grid.items.add(juce::GridItem().withArea(globalRow,5));
         grid.performLayout(velInner);
     }
 
@@ -613,14 +623,7 @@ void MainComponent::onSemitoneSliderChanged(int stringIndex)
         bridge.setStringSemitoneShift(stringIndex, (int) s->getValue());
 }
 
-void MainComponent::onChannelComboChanged(int stringIndex)
-{
-    if (auto* cb = stringChannelCombos[stringIndex])
-    {
-        int ch = cb->getSelectedId();
-        bridge.setStringChannel(stringIndex, ch);
-    }
-}
+// per-string channel mapping removed; unified channel used instead
 
 static juce::Array<int> intervalsForScaleType(int scaleTypeId)
 {

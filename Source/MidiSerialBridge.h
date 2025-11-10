@@ -50,9 +50,13 @@ public:
     // Per-string tuning setters
     void setStringOctaveShift(int stringIndex, int shift);
     void setStringSemitoneShift(int stringIndex, int shift);
-    // Map a string (index 0..5) to a MIDI channel (1..16). If unset uses direct index+1.
-    void setStringChannel(int stringIndex, int channel);
-    int  getStringChannel(int stringIndex) const;
+    // Global octave shift applied to all strings (-4..+4)
+    void setGlobalOctaveShift(int shift);
+    int  getGlobalOctaveShift() const { return globalOctaveShift; }
+
+    // Set unified output channel (1..16) for all strings
+    void setUnifiedChannel(int channel);
+    int  getUnifiedChannel() const { return unifiedChannel; }
 
     // Utility to describe current scale
     juce::String getScaleDescription() const;
@@ -72,7 +76,6 @@ private:
 
     // Message transform helpers
     bool shouldFilterOutNote(int midiNote) const; // returns true if note should be suppressed
-    int applyVelocityScaling(int channel, int velocity) const; // channel 0..15
     bool processOutgoingMessage(const juce::MidiMessage& original, juce::MidiMessage& transformed); // returns false if filtered
     
     // Utility functions
@@ -121,15 +124,19 @@ private:
 
     // Runtime settings -------------------------------------------------------
     int stringVelocityScale[6]; // 1..10 values, mapped to velocity multiplier
-    int octaveShift[6]; // -4..+4
-    int semitoneShift[6]; // -12..12
-    int channelMap[6]; // 1..16 (0 means use stringIndex+1)
+    int octaveShift[6]; // -4..+4 per string
+    int semitoneShift[6]; // -12..12 per string
+    int unifiedChannel; // 1..16 single channel output
+    int globalOctaveShift; // -4..+4 applied to all strings
     int rootNotePc; // 0..11
     bool diatonicMask[12]; // allowed pitch classes
     bool filterEnabled { false };
     DiatonicMode diatonicMode { DiatonicMode::Filter };
     std::unordered_set<int> suppressedNotes; // store (channel<<8)|note for which NoteOn was filtered, so we also drop NoteOff
     std::unordered_map<int,int> replacedNotes; // original key -> replaced note
+
+    // Internal helper
+    int applyVelocityScaling(int stringIndex, int velocity) const;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiSerialBridge)
 };
