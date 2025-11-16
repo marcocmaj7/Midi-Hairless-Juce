@@ -22,6 +22,13 @@ Hairless MIDI Serial Bridge è il modo più semplice per connettere dispositivi 
 - ✅ Running Status MIDI
 - ✅ Messaggi di debug custom dal device seriale
 
+## Novità principali (2025)
+
+- Canale MIDI Unico: tutti i messaggi di output possono essere instradati su un singolo canale selezionabile (1..16). Questo facilita l'integrazione con dispositivi che aspettano messaggi su un solo canale.
+- Ottava Globale: nuovo controllo per trasporre tutte le 6 corde globalmente di ±4 ottave.
+- Trasposizione per-corda: ogni corda mantiene i propri controlli di ottava (±4) e semitono (±12) indipendenti — possono essere combinati con l'ottava globale.
+- UI compatta: la colonna "canale" per-corda è stata rimossa e i controlli globali sono stati aggiunti nella sezione "Velocity & Tuning".
+
 ## Requisiti
 
 ### Per compilare
@@ -104,6 +111,17 @@ make -j$(nproc)
 5. **Attiva il Bridge** cliccando su "Bridge Active"
 6. **Monitor LED** - Osserva gli indicatori LED per vedere il traffico in tempo reale
 7. **Debug** - Abilita "Show Debug Messages" per vedere messaggi dettagliati
+
+### Nuovi controlli importanti
+
+- **Canale Unico**: seleziona il canale MIDI di uscita comune per tutti gli eventi. Utile quando il dispositivo ricevente si aspetta messaggi su un singolo canale.
+- **Octava Globale**: sposta tutte le corde di ±4 ottave. I valori per-corda (Oct/Semi) vengono sommati all'ottava globale.
+- **Ottave/Semitoni per corda**: ogni corda ha ancora i suoi slider di `Oct` e `Semi` che si applicano solo a quella corda.
+
+Esempio di comportamento:
+- Se imposti `Octava Globale = +1` e per la corda Low E (`Oct = -1`, `Semi = +2`), la trasposizione complessiva applicata alle note di quella corda sarà +0 ottave e +2 semitoni.
+
+Nota: per ora i settaggi non vengono salvati su disco—sono validi solo durante la sessione corrente.
 
 ### Con Arduino
 
